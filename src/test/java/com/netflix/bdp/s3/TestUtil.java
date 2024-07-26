@@ -113,6 +113,8 @@ public class TestUtil {
 
   public abstract static class JobCommitterTest<C extends OutputCommitter> {
     private static final JobID JOB_ID = new JobID("job", 1);
+    private static final TaskID TASK_ID = new TaskID(JOB_ID, TaskType.JOB_CLEANUP, 1);
+    private static final TaskAttemptID TASK_ATTEMP_ID = new TaskAttemptID(TASK_ID, 1);
     private static final Configuration CONF = new Configuration();
 
     protected static final String OUTPUT_PREFIX = "output/path";
@@ -121,7 +123,7 @@ public class TestUtil {
 
     // created in BeforeClass
     private FileSystem mockFS = null;
-    private JobContext job = null;
+    private TaskAttemptContext job = null;
 
     // created in Before
     private TestUtil.ClientResults results = null;
@@ -144,7 +146,7 @@ public class TestUtil {
         throw new RuntimeException("Cannot continue: S3 not mocked");
       }
 
-      this.job = new JobContextImpl(CONF, JOB_ID);
+      this.job = new TaskAttemptContextImpl(CONF, TASK_ATTEMP_ID);
       job.getConfiguration().set(UPLOAD_UUID, UUID.randomUUID().toString());
 
       this.results = new TestUtil.ClientResults();
@@ -156,7 +158,7 @@ public class TestUtil {
       return mockFS;
     }
 
-    public JobContext getJob() {
+    public TaskAttemptContext getJob() {
       return job;
     }
 

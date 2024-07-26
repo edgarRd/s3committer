@@ -36,11 +36,6 @@ class MockedS3Committer extends S3MultipartOutputCommitter {
   public final ClientErrors errors = new ClientErrors();
   private final AmazonS3 mockClient = TestUtil.newMockClient(results, errors);
 
-  public MockedS3Committer(Path outputPath, JobContext context)
-      throws IOException {
-    super(outputPath, context);
-  }
-
   public MockedS3Committer(Path outputPath, TaskAttemptContext context)
       throws IOException {
     super(outputPath, context);

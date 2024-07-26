@@ -67,6 +67,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
 
   private final int numThreads;
   private JobContext job = null;
+  private TaskAttemptContext attempt = null;
   private String uuid = null;
   private TaskAttemptContext tac = null;
   private Configuration conf = null;
@@ -97,7 +98,8 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         "s3.multipart.committer.num-threads", String.valueOf(numThreads));
     getConfiguration().set(UPLOAD_UUID, UUID.randomUUID().toString());
     this.job = new JobContextImpl(getConfiguration(), JOB_ID);
-    this.jobCommitter = new MockedS3Committer(S3_OUTPUT_PATH, job);
+    this.attempt = new TaskAttemptContextImpl(getConfiguration(), AID);
+    this.jobCommitter = new MockedS3Committer(S3_OUTPUT_PATH, attempt);
     jobCommitter.setupJob(job);
     this.uuid = job.getConfiguration().get(UPLOAD_UUID);
 

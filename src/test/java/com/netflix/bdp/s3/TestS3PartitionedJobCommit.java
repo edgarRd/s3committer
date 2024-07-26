@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.IOException;
@@ -45,7 +46,7 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
   private static class TestPartitionedOutputCommitter extends S3PartitionedOutputCommitter {
     private final AmazonS3 client;
-    private TestPartitionedOutputCommitter(JobContext context, AmazonS3 client)
+    private TestPartitionedOutputCommitter(TaskAttemptContext context, AmazonS3 client)
         throws IOException {
       super(OUTPUT_PATH, context);
       this.client = client;

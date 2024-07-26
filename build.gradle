@@ -45,12 +45,14 @@ sourceCompatibility = '1.7'
 targetCompatibility = '1.7'
 
 dependencies {
+  compileOnly 'org.apache.parquet:parquet-hadoop:1.10.1'
   compileOnly 'com.amazonaws:aws-java-sdk-s3:1.11.813'
   compileOnly 'org.apache.hadoop:hadoop-client:2.8.5'
   compileOnly 'org.apache.hadoop:hadoop-aws:2.8.5'
   compileOnly 'org.slf4j:slf4j-api:1.7.5'
   implementation 'com.google.guava:guava:19.0'
 
+  testImplementation 'org.apache.parquet:parquet-hadoop:1.10.1'
   testImplementation 'com.amazonaws:aws-java-sdk-s3:1.11.813'
   testImplementation 'org.apache.hadoop:hadoop-aws:2.8.5'
   testImplementation 'org.apache.hadoop:hadoop-client:2.8.5'

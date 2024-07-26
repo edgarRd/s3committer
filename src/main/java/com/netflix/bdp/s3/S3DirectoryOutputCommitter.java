@@ -29,10 +29,6 @@ public class S3DirectoryOutputCommitter extends S3MultipartOutputCommitter {
   private static final Logger LOG = LoggerFactory.getLogger(
       S3DirectoryOutputCommitter.class);
 
-  public S3DirectoryOutputCommitter(Path outputPath, JobContext context) throws IOException {
-    super(outputPath, context);
-  }
-
   public S3DirectoryOutputCommitter(Path outputPath, TaskAttemptContext context) throws IOException {
     super(outputPath, context);
   }
@@ -62,6 +58,8 @@ public class S3DirectoryOutputCommitter extends S3MultipartOutputCommitter {
   @Override
   public void commitJob(JobContext context) throws IOException {
     Path outputPath = getOutputPath(context);
+
+    LOG.info("Committing job in output path {}", outputPath);
     // use the FS implementation because it will check for _$folder$
     FileSystem fs = outputPath.getFileSystem(context.getConfiguration());
     if (fs.exists(outputPath)) {
