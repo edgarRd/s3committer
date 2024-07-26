@@ -17,11 +17,13 @@
 package com.netflix.bdp.s3.util;
 
 import com.google.common.base.Objects;
+import com.netflix.bdp.s3.S3Committer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import java.io.IOException;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Random;
 
 public class Paths {
@@ -125,8 +127,13 @@ public class Paths {
   private static Path localTemp(Configuration conf, int taskId, int attemptId) {
     String localDirs = conf.get("mapreduce.cluster.local.dir");
     Random rand = new Random(Objects.hashCode(taskId, attemptId));
-    String[] dirs = localDirs.split(",");
-    String dir = dirs[rand.nextInt(dirs.length)];
+    String[] dirs = Arrays.stream(localDirs.split(","))
+            .map(String::trim)
+            .toArray(String[]::new);
+
+    final boolean randomizeDir = conf
+            .getBoolean(S3Committer.RANDOMIZE_LOCAL_DIR, S3Committer.DEFAULT_RANDOMIZE_LOCAL_DIR);
+    final String dir = randomizeDir ? dirs[rand.nextInt(dirs.length)] : dirs[0];
 
     try {
       return FileSystem.getLocal(conf).makeQualified(new Path(dir));

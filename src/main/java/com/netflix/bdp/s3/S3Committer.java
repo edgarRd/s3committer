@@ -23,6 +23,8 @@ public class S3Committer {
   public static final String CONFLICT_MODE = "s3.multipart.committer.conflict-mode";
   public static final String NUM_THREADS = "s3.multipart.committer.num-threads";
   public static final int DEFAULT_NUM_THREADS = 8;
+  public static final String RANDOMIZE_LOCAL_DIR = "s3.multipart.committer.randomize-local-dir";
+  public static final boolean DEFAULT_RANDOMIZE_LOCAL_DIR = true;
 
   // Spark configuration keys
   public static final String SPARK_WRITE_UUID = "spark.sql.sources.writeJobUUID";

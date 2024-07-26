@@ -72,8 +72,7 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
       throws IOException {
     super(outputPath, context);
 
-    LOG.info("Creating S3MultipartOutputCommitter for output path: {}", outputPath);
-
+    LOG.debug("Creating S3MultipartOutputCommitter for output path: {}", outputPath);
     this.constructorOutputPath = outputPath;
 
     Configuration conf = context.getConfiguration();
