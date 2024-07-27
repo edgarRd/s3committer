@@ -16,21 +16,22 @@
 
 package com.netflix.bdp.s3;
 
+import static com.netflix.bdp.s3.util.Paths.getRelativePath;
+
 import com.google.common.collect.Sets;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.junit.Assert;
-import org.junit.Test;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.junit.Assert;
+import org.junit.Test;
 
-import static com.netflix.bdp.s3.util.Paths.getRelativePath;
-
-public class TestS3PartitionedFileListing extends TestUtil.TaskCommitterTest<S3PartitionedOutputCommitter> {
+public class TestS3PartitionedFileListing
+    extends TestUtil.TaskCommitterTest<S3PartitionedOutputCommitter> {
   @Override
   S3PartitionedOutputCommitter newJobCommitter() throws IOException {
     return new S3PartitionedOutputCommitter(OUTPUT_PATH, getJob());
@@ -53,8 +54,14 @@ public class TestS3PartitionedFileListing extends TestUtil.TaskCommitterTest<S3P
     Set<String> expectedFiles = Sets.newHashSet();
     for (String dateint : Arrays.asList("20161115", "20161116")) {
       for (String hour : Arrays.asList("13", "14")) {
-        String relative = "dateint=" + dateint + "/hour=" + hour +
-            "/" + UUID.randomUUID().toString() + ".parquet";
+        String relative =
+            "dateint="
+                + dateint
+                + "/hour="
+                + hour
+                + "/"
+                + UUID.randomUUID().toString()
+                + ".parquet";
         expectedFiles.add(relative);
         attemptFS.create(new Path(attemptPath, relative)).close();
       }
@@ -87,13 +94,25 @@ public class TestS3PartitionedFileListing extends TestUtil.TaskCommitterTest<S3P
       attemptFS.create(new Path(attemptPath, metadata)).close();
 
       for (String hour : Arrays.asList("13", "14")) {
-        String relative = "dateint=" + dateint + "/hour=" + hour +
-            "/" + UUID.randomUUID().toString() + ".parquet";
+        String relative =
+            "dateint="
+                + dateint
+                + "/hour="
+                + hour
+                + "/"
+                + UUID.randomUUID().toString()
+                + ".parquet";
         expectedFiles.add(relative);
         attemptFS.create(new Path(attemptPath, relative)).close();
 
-        String partial = "dateint=" + dateint + "/hour=" + hour +
-            "/." + UUID.randomUUID().toString() + ".partial";
+        String partial =
+            "dateint="
+                + dateint
+                + "/hour="
+                + hour
+                + "/."
+                + UUID.randomUUID().toString()
+                + ".partial";
         attemptFS.create(new Path(attemptPath, partial)).close();
       }
     }

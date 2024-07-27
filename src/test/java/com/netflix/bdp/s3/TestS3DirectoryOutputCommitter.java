@@ -16,18 +16,18 @@
 
 package com.netflix.bdp.s3;
 
-import org.apache.hadoop.fs.FileSystem;
-import org.junit.Test;
-import org.mockito.Mockito;
-
-import java.util.concurrent.Callable;
-
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-public class TestS3DirectoryOutputCommitter extends TestUtil.JobCommitterTest<S3DirectoryOutputCommitter> {
+import java.util.concurrent.Callable;
+import org.apache.hadoop.fs.FileSystem;
+import org.junit.Test;
+import org.mockito.Mockito;
+
+public class TestS3DirectoryOutputCommitter
+    extends TestUtil.JobCommitterTest<S3DirectoryOutputCommitter> {
   @Override
   S3DirectoryOutputCommitter newJobCommitter() throws Exception {
     return new S3DirectoryOutputCommitter(OUTPUT_PATH, getJob());
@@ -41,23 +41,23 @@ public class TestS3DirectoryOutputCommitter extends TestUtil.JobCommitterTest<S3
 
     final S3DirectoryOutputCommitter committer = newJobCommitter();
 
-    TestUtil.assertThrows("Should throw an exception because the path exists",
-        AlreadyExistsException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            committer.setupJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw an exception because the path exists",
+        AlreadyExistsException.class,
+        (Callable<Void>)
+            () -> {
+              committer.setupJob(getJob());
+              return null;
+            });
 
-    TestUtil.assertThrows("Should throw an exception because the path exists",
-        AlreadyExistsException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            committer.commitJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw an exception because the path exists",
+        AlreadyExistsException.class,
+        (Callable<Void>)
+            () -> {
+              committer.commitJob(getJob());
+              return null;
+            });
 
     reset(mockS3);
     when(mockS3.exists(OUTPUT_PATH)).thenReturn(false);
@@ -84,23 +84,23 @@ public class TestS3DirectoryOutputCommitter extends TestUtil.JobCommitterTest<S3
 
     final S3DirectoryOutputCommitter committer = newJobCommitter();
 
-    TestUtil.assertThrows("Should throw an exception because the path exists",
-        AlreadyExistsException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            committer.setupJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw an exception because the path exists",
+        AlreadyExistsException.class,
+        (Callable<Void>)
+            () -> {
+              committer.setupJob(getJob());
+              return null;
+            });
 
-    TestUtil.assertThrows("Should throw an exception because the path exists",
-        AlreadyExistsException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws Exception {
-            committer.commitJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw an exception because the path exists",
+        AlreadyExistsException.class,
+        (Callable<Void>)
+            () -> {
+              committer.commitJob(getJob());
+              return null;
+            });
 
     reset(mockS3);
     when(mockS3.exists(OUTPUT_PATH)).thenReturn(false);

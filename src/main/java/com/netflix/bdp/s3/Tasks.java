@@ -17,8 +17,6 @@
 package com.netflix.bdp.s3;
 
 import com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
@@ -28,7 +26,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // TODO: retries
 public class Tasks {
@@ -200,57 +199,56 @@ public class Tasks {
 
       for (final I item : items) {
         // submit a task for each item that will either run or abort the task
-        futures.add(service.submit(new Runnable() {
-          @Override
-          public void run() {
-            if (!(stopOnFailure && taskFailed.get())) {
-              // run the task
-              boolean threw = true;
-              try {
-                task.run(item);
-                succeeded.add(item);
+        futures.add(
+            service.submit(
+                () -> {
+                  if (!(stopOnFailure && taskFailed.get())) {
+                    // run the task
+                    boolean threw = true;
+                    try {
+                      task.run(item);
+                      succeeded.add(item);
 
-                threw = false;
+                      threw = false;
 
-              } catch (Exception e) {
-                taskFailed.set(true);
-                exceptions.add(e);
+                    } catch (Exception e) {
+                      taskFailed.set(true);
+                      exceptions.add(e);
 
-                if (onFailure != null) {
-                  try {
-                    onFailure.run(item, e);
-                  } catch (Exception failException) {
-                    LOG.error("Failed to clean up on failure", e);
-                    // swallow the exception
+                      if (onFailure != null) {
+                        try {
+                          onFailure.run(item, e);
+                        } catch (Exception failException) {
+                          LOG.error("Failed to clean up on failure", e);
+                          // swallow the exception
+                        }
+                      }
+                    } finally {
+                      if (threw) {
+                        taskFailed.set(true);
+                      }
+                    }
+
+                  } else if (abortTask != null) {
+                    // abort the task instead of running it
+                    if (stopAbortsOnFailure && abortFailed.get()) {
+                      return;
+                    }
+
+                    boolean failed = true;
+                    try {
+                      abortTask.run(item);
+                      failed = false;
+                    } catch (Exception e) {
+                      LOG.error("Failed to abort task", e);
+                      // swallow the exception
+                    } finally {
+                      if (failed) {
+                        abortFailed.set(true);
+                      }
+                    }
                   }
-                }
-              } finally {
-                if (threw) {
-                  taskFailed.set(true);
-                }
-              }
-
-            } else if (abortTask != null) {
-              // abort the task instead of running it
-              if (stopAbortsOnFailure && abortFailed.get()) {
-                return;
-              }
-
-              boolean failed = true;
-              try {
-                abortTask.run(item);
-                failed = false;
-              } catch (Exception e) {
-                LOG.error("Failed to abort task", e);
-                // swallow the exception
-              } finally {
-                if (failed) {
-                  abortFailed.set(true);
-                }
-              }
-            }
-          }
-        }));
+                }));
       }
 
       // let the above tasks complete (or abort)
@@ -260,27 +258,26 @@ public class Tasks {
       if (taskFailed.get() && revertTask != null) {
         // at least one task failed, revert any that succeeded
         for (final I item : succeeded) {
-          futures.add(service.submit(new Runnable() {
-            @Override
-            public void run() {
-              if (stopRevertsOnFailure && revertFailed.get()) {
-                return;
-              }
+          futures.add(
+              service.submit(
+                  () -> {
+                    if (stopRevertsOnFailure && revertFailed.get()) {
+                      return;
+                    }
 
-              boolean failed = true;
-              try {
-                revertTask.run(item);
-                failed = false;
-              } catch (Exception e) {
-                LOG.error("Failed to revert task", e);
-                // swallow the exception
-              } finally {
-                if (failed) {
-                  revertFailed.set(true);
-                }
-              }
-            }
-          }));
+                    boolean failed = true;
+                    try {
+                      revertTask.run(item);
+                      failed = false;
+                    } catch (Exception e) {
+                      LOG.error("Failed to revert task", e);
+                      // swallow the exception
+                    } finally {
+                      if (failed) {
+                        revertFailed.set(true);
+                      }
+                    }
+                  }));
         }
 
         // let the revert tasks complete
@@ -305,7 +302,7 @@ public class Tasks {
       }
 
       if (numFinished == futures.size()) {
-        // all of the futures are done, stop looping
+        // all the futures are done, stop looping
         break;
       } else {
         try {
@@ -330,8 +327,7 @@ public class Tasks {
   }
 
   @SuppressWarnings("unchecked")
-  private static <E extends Exception> void throwOne(Collection<Exception> exceptions)
-      throws E {
+  private static <E extends Exception> void throwOne(Collection<Exception> exceptions) throws E {
     Iterator<Exception> iter = exceptions.iterator();
     Exception e = iter.next();
     Class<? extends Exception> exceptionClass = e.getClass();

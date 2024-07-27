@@ -16,8 +16,21 @@
 
 package com.netflix.bdp.s3;
 
+import static com.netflix.bdp.s3.S3Committer.UPLOAD_UUID;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,31 +46,14 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-
-import static com.netflix.bdp.s3.S3Committer.UPLOAD_UUID;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 public class TestUtil {
-  /**
-   * Provides setup/teardown of a MiniDFSCluster for tests that need one.
-   */
+  /** Provides setup/teardown of a MiniDFSCluster for tests that need one. */
   public static class MiniDFSTest {
     private static Configuration conf = null;
     private static MiniDFSCluster cluster = null;
@@ -84,7 +80,7 @@ public class TestUtil {
         c.setBoolean("dfs.webhdfs.enabled", true);
         // if this fails with "The directory is already locked" set umask to 0022
         cluster = new MiniDFSCluster(c, 1, true, null);
-        //cluster = new MiniDFSCluster.Builder(new Configuration()).build();
+        // cluster = new MiniDFSCluster.Builder(new Configuration()).build();
         dfs = cluster.getFileSystem();
         conf = new Configuration(dfs.getConf());
         lfs = FileSystem.getLocal(conf);
@@ -130,8 +126,7 @@ public class TestUtil {
     @Before
     public void setupJob() throws Exception {
       this.mockFS = mock(FileSystem.class);
-      FileSystem s3 = new Path("s3://" + MockS3FileSystem.BUCKET + "/")
-          .getFileSystem(CONF);
+      FileSystem s3 = new Path("s3://" + MockS3FileSystem.BUCKET + "/").getFileSystem(CONF);
       if (s3 instanceof MockS3FileSystem) {
         ((MockS3FileSystem) s3).setMock(mockFS);
       } else {
@@ -171,8 +166,8 @@ public class TestUtil {
 
   public abstract static class TaskCommitterTest<C extends OutputCommitter>
       extends JobCommitterTest<C> {
-    private static final TaskAttemptID AID = new TaskAttemptID(
-        new TaskID(JobCommitterTest.JOB_ID, TaskType.REDUCE, 2), 3);
+    private static final TaskAttemptID AID =
+        new TaskAttemptID(new TaskID(JobCommitterTest.JOB_ID, TaskType.REDUCE, 2), 3);
 
     private C jobCommitter = null;
     private TaskAttemptContext tac = null;
@@ -182,12 +177,10 @@ public class TestUtil {
       this.jobCommitter = newJobCommitter();
       jobCommitter.setupJob(getJob());
 
-      this.tac = new TaskAttemptContextImpl(
-          new Configuration(getJob().getConfiguration()), AID);
+      this.tac = new TaskAttemptContextImpl(new Configuration(getJob().getConfiguration()), AID);
 
       // get the task's configuration copy so modifications take effect
-      tac.getConfiguration()
-          .set("mapred.local.dir", "/tmp/local-0,/tmp/local-1");
+      tac.getConfiguration().set("mapred.local.dir", "/tmp/local-0,/tmp/local-1");
     }
 
     protected C getJobCommitter() {
@@ -269,123 +262,126 @@ public class TestUtil {
     }
   }
 
-  public static S3Client newMockClient(final ClientResults results,
-                                       final ClientErrors errors) {
+  public static S3Client newMockClient(final ClientResults results, final ClientErrors errors) {
     S3Client mockClient = mock(S3Client.class);
     final Object lock = new Object();
 
     when(mockClient.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
-        .thenAnswer(new Answer<CreateMultipartUploadResponse>() {
-          @Override
-          public CreateMultipartUploadResponse answer(
-              InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              if (results.requests.size() == errors.failOnInit) {
-                if (errors.recover) {
-                  errors.failOnInit(-1);
-                }
-                throw SdkException.builder().message("Fail on init " + results.requests.size()).build();
-              }
+        .thenAnswer(
+            (Answer<CreateMultipartUploadResponse>)
+                invocation -> {
+                  synchronized (lock) {
+                    if (results.requests.size() == errors.failOnInit) {
+                      if (errors.recover) {
+                        errors.failOnInit(-1);
+                      }
+                      throw SdkException.builder()
+                          .message("Fail on init " + results.requests.size())
+                          .build();
+                    }
 
-              String uploadId = UUID.randomUUID().toString();
-              CreateMultipartUploadRequest req = invocation.getArgumentAt(0, CreateMultipartUploadRequest.class);
-              S3MultipartUploadRef ref = S3MultipartUploadRef.of(req.bucket(), req.key(), uploadId);
-              results.requests.add(ref);
-              results.uploads.add(uploadId);
-              return newResult(ref);
-            }
-          }
-        });
+                    String uploadId = UUID.randomUUID().toString();
+                    CreateMultipartUploadRequest req =
+                        invocation.getArgumentAt(0, CreateMultipartUploadRequest.class);
+                    S3MultipartUploadRef ref =
+                        S3MultipartUploadRef.of(req.bucket(), req.key(), uploadId);
+                    results.requests.add(ref);
+                    results.uploads.add(uploadId);
+                    return newResult(ref);
+                  }
+                });
 
     when(mockClient.uploadPart(any(UploadPartRequest.class), any(RequestBody.class)))
-        .thenAnswer(new Answer<UploadPartResponse>() {
-          @Override
-          public UploadPartResponse answer(InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              if (results.parts.size() == errors.failOnUpload) {
-                if (errors.recover) {
-                  errors.failOnUpload(-1);
-                }
-                throw SdkException.builder().message("Fail on upload " + results.parts.size()).build();
-              }
-              UploadPartRequest req = invocation.getArgumentAt(0, UploadPartRequest.class);
-              results.parts.put(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()), req.partNumber());
-              String etag = UUID.randomUUID().toString();
-              List<String> etags = results.tagsByUpload.computeIfAbsent(req.uploadId(), k -> Lists.newArrayList());
-              etags.add(etag);
-              return newResult(req, etag);
-            }
-          }
-        });
+        .thenAnswer(
+            (Answer<UploadPartResponse>)
+                invocation -> {
+                  synchronized (lock) {
+                    if (results.parts.size() == errors.failOnUpload) {
+                      if (errors.recover) {
+                        errors.failOnUpload(-1);
+                      }
+                      throw SdkException.builder()
+                          .message("Fail on upload " + results.parts.size())
+                          .build();
+                    }
+                    UploadPartRequest req = invocation.getArgumentAt(0, UploadPartRequest.class);
+                    results.parts.put(
+                        S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()),
+                        req.partNumber());
+                    String etag = UUID.randomUUID().toString();
+                    List<String> etags =
+                        results.tagsByUpload.computeIfAbsent(
+                            req.uploadId(), k -> Lists.newArrayList());
+                    etags.add(etag);
+                    return newResult(req, etag);
+                  }
+                });
 
-    when(mockClient
-        .completeMultipartUpload(any(CompleteMultipartUploadRequest.class)))
-        .thenAnswer(new Answer<CompleteMultipartUploadResponse>() {
-          @Override
-          public CompleteMultipartUploadResponse answer(
-              InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              if (results.commits.size() == errors.failOnCommit) {
-                if (errors.recover) {
-                  errors.failOnCommit(-1);
-                }
-                throw SdkException.builder().message("Fail on commit " + results.commits.size()).build();
-              }
-              CompleteMultipartUploadRequest req = invocation.getArgumentAt(
-                  0, CompleteMultipartUploadRequest.class);
-              results.commits.add(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
-              return newResult(req);
-            }
-          }
-        });
+    when(mockClient.completeMultipartUpload(any(CompleteMultipartUploadRequest.class)))
+        .thenAnswer(
+            (Answer<CompleteMultipartUploadResponse>)
+                invocation -> {
+                  synchronized (lock) {
+                    if (results.commits.size() == errors.failOnCommit) {
+                      if (errors.recover) {
+                        errors.failOnCommit(-1);
+                      }
+                      throw SdkException.builder()
+                          .message("Fail on commit " + results.commits.size())
+                          .build();
+                    }
+                    CompleteMultipartUploadRequest req =
+                        invocation.getArgumentAt(0, CompleteMultipartUploadRequest.class);
+                    results.commits.add(
+                        S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
+                    return newResult(req);
+                  }
+                });
 
     doAnswer(
-        new Answer<Void>() {
-          @Override
-          public Void answer(
-              InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              if (results.aborts.size() == errors.failOnAbort) {
-                if (errors.recover) {
-                  errors.failOnAbort(-1);
-                }
-                throw SdkException.builder().message("Fail on abort " + results.aborts.size()).build();
-              }
+            (Answer<Void>)
+                invocation -> {
+                  synchronized (lock) {
+                    if (results.aborts.size() == errors.failOnAbort) {
+                      if (errors.recover) {
+                        errors.failOnAbort(-1);
+                      }
+                      throw SdkException.builder()
+                          .message("Fail on abort " + results.aborts.size())
+                          .build();
+                    }
 
-              AbortMultipartUploadRequest req = invocation.getArgumentAt(0, AbortMultipartUploadRequest.class);
-              results.aborts.add(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
-              return null;
-            }
-          }
-        })
+                    AbortMultipartUploadRequest req =
+                        invocation.getArgumentAt(0, AbortMultipartUploadRequest.class);
+                    results.aborts.add(
+                        S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
+                    return null;
+                  }
+                })
         .when(mockClient)
         .abortMultipartUpload(any(AbortMultipartUploadRequest.class));
 
     doAnswer(
-        new Answer<Void>() {
-          @Override
-          public Void answer(
-              InvocationOnMock invocation) throws Throwable {
-            synchronized (lock) {
-              DeleteObjectRequest req = invocation.getArgumentAt(0, DeleteObjectRequest.class);
-              results.deletes.add(S3Ref.of(req.bucket(), req.key()));
-              return null;
-            }
-          }
-        })
+            (Answer<Void>)
+                invocation -> {
+                  synchronized (lock) {
+                    DeleteObjectRequest req =
+                        invocation.getArgumentAt(0, DeleteObjectRequest.class);
+                    results.deletes.add(S3Ref.of(req.bucket(), req.key()));
+                    return null;
+                  }
+                })
         .when(mockClient)
         .deleteObject(any(DeleteObjectRequest.class));
 
     return mockClient;
   }
 
-  private static CompleteMultipartUploadResponse newResult(
-      CompleteMultipartUploadRequest req) {
+  private static CompleteMultipartUploadResponse newResult(CompleteMultipartUploadRequest req) {
     return CompleteMultipartUploadResponse.builder().build();
   }
 
-  private static UploadPartResponse newResult(UploadPartRequest request,
-                                            String etag) {
+  private static UploadPartResponse newResult(UploadPartRequest request, String etag) {
     return UploadPartResponse.builder().eTag(etag).build();
   }
 
@@ -393,10 +389,8 @@ public class TestUtil {
     return CreateMultipartUploadResponse.builder().uploadId(uploadRef.uploadId()).build();
   }
 
-  public static void createTestOutputFiles(List<String> relativeFiles,
-                                           Path attemptPath,
-                                           Configuration conf)
-      throws Exception {
+  public static void createTestOutputFiles(
+      List<String> relativeFiles, Path attemptPath, Configuration conf) throws Exception {
     // create files in the attempt path that should be found by getTaskOutput
     FileSystem attemptFS = attemptPath.getFileSystem(conf);
     attemptFS.delete(attemptPath, true);
@@ -410,6 +404,7 @@ public class TestUtil {
 
   /**
    * A convenience method to avoid a large number of @Test(expected=...) tests
+   *
    * @param message A String message to describe this assertion
    * @param expected An Exception class that the Runnable should throw
    * @param callable A Callable that is expected to throw the exception
@@ -421,22 +416,27 @@ public class TestUtil {
 
   /**
    * A convenience method to avoid a large number of @Test(expected=...) tests
+   *
    * @param message A String message to describe this assertion
    * @param expected An Exception class that the Runnable should throw
    * @param callable A Callable that is expected to throw the exception
    */
   public static void assertThrows(
-      String message, Class<? extends Exception> expected, String expectedMsg,
+      String message,
+      Class<? extends Exception> expected,
+      String expectedMsg,
       Callable<?> callable) {
     try {
       callable.call();
-      Assert.fail("No exception was thrown (" + message + "), expected: " +
-          expected.getName());
+      Assert.fail("No exception was thrown (" + message + "), expected: " + expected.getName());
     } catch (Exception actual) {
       Assert.assertEquals(message, expected, actual.getClass());
       if (expectedMsg != null) {
-        Assert.assertTrue("Exception message should contain \"" + expectedMsg +
-            "\", but was: " + actual.getMessage(),
+        Assert.assertTrue(
+            "Exception message should contain \""
+                + expectedMsg
+                + "\", but was: "
+                + actual.getMessage(),
             actual.getMessage().contains(expectedMsg));
       }
     }
@@ -444,33 +444,24 @@ public class TestUtil {
 
   /**
    * A convenience method to avoid a large number of @Test(expected=...) tests
+   *
    * @param message A String message to describe this assertion
    * @param expected An Exception class that the Runnable should throw
    * @param runnable A Runnable that is expected to throw the exception
    */
   public static void assertThrows(
-      String message, Class<? extends Exception> expected, Runnable runnable) {
-    assertThrows(message, expected, null, runnable);
-  }
-
-  /**
-   * A convenience method to avoid a large number of @Test(expected=...) tests
-   * @param message A String message to describe this assertion
-   * @param expected An Exception class that the Runnable should throw
-   * @param runnable A Runnable that is expected to throw the exception
-   */
-  public static void assertThrows(
-      String message, Class<? extends Exception> expected, String expectedMsg,
-      Runnable runnable) {
+      String message, Class<? extends Exception> expected, String expectedMsg, Runnable runnable) {
     try {
       runnable.run();
-      Assert.fail("No exception was thrown (" + message + "), expected: " +
-          expected.getName());
+      Assert.fail("No exception was thrown (" + message + "), expected: " + expected.getName());
     } catch (Exception actual) {
       Assert.assertEquals(message, expected, actual.getClass());
       if (expectedMsg != null) {
-        Assert.assertTrue("Exception message should contain \"" + expectedMsg +
-                "\", but was: " + actual.getMessage(),
+        Assert.assertTrue(
+            "Exception message should contain \""
+                + expectedMsg
+                + "\", but was: "
+                + actual.getMessage(),
             actual.getMessage().contains(expectedMsg));
       }
     }

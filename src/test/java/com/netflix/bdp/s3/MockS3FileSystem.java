@@ -16,6 +16,9 @@
 
 package com.netflix.bdp.s3;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.URI;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -23,10 +26,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
-import org.mockito.Mockito;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.URI;
 
 public class MockS3FileSystem extends FileSystem {
   public static final String BUCKET = "bucket-name";
@@ -34,8 +33,7 @@ public class MockS3FileSystem extends FileSystem {
 
   private FileSystem mock = null;
 
-  public MockS3FileSystem() {
-  }
+  public MockS3FileSystem() {}
 
   @Override
   public String getScheme() {
@@ -67,12 +65,21 @@ public class MockS3FileSystem extends FileSystem {
   }
 
   @Override
-  public FSDataOutputStream create(Path f, FsPermission permission, boolean overwrite, int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
+  public FSDataOutputStream create(
+      Path f,
+      FsPermission permission,
+      boolean overwrite,
+      int bufferSize,
+      short replication,
+      long blockSize,
+      Progressable progress)
+      throws IOException {
     return mock.create(f, permission, overwrite, bufferSize, replication, blockSize, progress);
   }
 
   @Override
-  public FSDataOutputStream append(Path f, int bufferSize, Progressable progress) throws IOException {
+  public FSDataOutputStream append(Path f, int bufferSize, Progressable progress)
+      throws IOException {
     return mock.append(f, bufferSize, progress);
   }
 

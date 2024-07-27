@@ -18,6 +18,8 @@ package com.netflix.bdp.s3;
 
 import com.netflix.bdp.s3.TestUtil.ClientErrors;
 import com.netflix.bdp.s3.TestUtil.ClientResults;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -25,20 +27,14 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import software.amazon.awssdk.services.s3.S3Client;
 
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-
-/**
- * Committer subclass that uses a mocked AmazonS3Client for testing.
- */
+/** Committer subclass that uses a mocked AmazonS3Client for testing. */
 class MockedS3Committer extends S3MultipartOutputCommitter {
 
   public final ClientResults results = new ClientResults();
   public final ClientErrors errors = new ClientErrors();
   private final S3Client mockClient = TestUtil.newMockClient(results, errors);
 
-  public MockedS3Committer(Path outputPath, TaskAttemptContext context)
-      throws IOException {
+  public MockedS3Committer(Path outputPath, TaskAttemptContext context) throws IOException {
     super(outputPath, context);
   }
 
@@ -54,8 +50,9 @@ class MockedS3Committer extends S3MultipartOutputCommitter {
     try {
       String jobCommitterPath = conf.get("mock-results-file");
       if (jobCommitterPath != null) {
-        try (ObjectOutputStream out = new ObjectOutputStream(
-            FileSystem.getLocal(conf).create(new Path(jobCommitterPath), false))) {
+        try (ObjectOutputStream out =
+            new ObjectOutputStream(
+                FileSystem.getLocal(conf).create(new Path(jobCommitterPath), false))) {
           out.writeObject(results);
         }
       }
@@ -63,5 +60,4 @@ class MockedS3Committer extends S3MultipartOutputCommitter {
       // do nothing, the test will fail
     }
   }
-
 }

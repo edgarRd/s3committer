@@ -18,13 +18,13 @@ package com.netflix.bdp.s3.util;
 
 import com.google.common.base.Objects;
 import com.netflix.bdp.s3.S3Committer;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Random;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 
 public class Paths {
   public static String addUUID(String path, String uuid) {
@@ -48,7 +48,7 @@ public class Paths {
     }
   }
 
-  private static class Pair<L, R> {
+  public static class Pair<L, R> {
     private final L first;
     private final R second;
 
@@ -56,7 +56,7 @@ public class Paths {
       return new Pair<>(first, second);
     }
 
-    private Pair(L first, R second) {
+    public Pair(L first, R second) {
       this.first = first;
       this.second = second;
     }
@@ -99,27 +99,22 @@ public class Paths {
     return path;
   }
 
-  public static String getRelativePath(Path basePath,
-                                       Path fullPath) {
+  public static String getRelativePath(Path basePath, Path fullPath) {
     // TODO: test this thoroughly
     // Use URI.create(Path#toString) to avoid URI character escape bugs
-    URI relative = URI.create(basePath.toString())
-        .relativize(URI.create(fullPath.toString()));
+    URI relative = URI.create(basePath.toString()).relativize(URI.create(fullPath.toString()));
     return relative.getPath();
   }
 
-  public static Path getLocalTaskAttemptTempDir(Configuration conf,
-                                                String uuid, int taskId,
-                                                int attemptId) {
+  public static Path getLocalTaskAttemptTempDir(
+      Configuration conf, String uuid, int taskId, int attemptId) {
     return new Path(localTemp(conf, taskId, attemptId), uuid);
   }
 
-  public static Path getMultipartUploadCommitsDirectory(Configuration conf,
-                                                        String uuid)
+  public static Path getMultipartUploadCommitsDirectory(Configuration conf, String uuid)
       throws IOException {
     // no need to use localTemp, this is HDFS in production
-    Path work = FileSystem.get(conf).makeQualified(
-        new Path("/tmp", uuid));
+    Path work = FileSystem.get(conf).makeQualified(new Path("/tmp", uuid));
     return new Path(work, "pending-uploads");
   }
 
@@ -127,12 +122,10 @@ public class Paths {
   private static Path localTemp(Configuration conf, int taskId, int attemptId) {
     String localDirs = conf.get("mapreduce.cluster.local.dir");
     Random rand = new Random(Objects.hashCode(taskId, attemptId));
-    String[] dirs = Arrays.stream(localDirs.split(","))
-            .map(String::trim)
-            .toArray(String[]::new);
+    String[] dirs = Arrays.stream(localDirs.split(",")).map(String::trim).toArray(String[]::new);
 
-    final boolean randomizeDir = conf
-            .getBoolean(S3Committer.RANDOMIZE_LOCAL_DIR, S3Committer.DEFAULT_RANDOMIZE_LOCAL_DIR);
+    final boolean randomizeDir =
+        conf.getBoolean(S3Committer.RANDOMIZE_LOCAL_DIR, S3Committer.DEFAULT_RANDOMIZE_LOCAL_DIR);
     final String dir = randomizeDir ? dirs[rand.nextInt(dirs.length)] : dirs[0];
 
     try {

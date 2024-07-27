@@ -16,20 +16,19 @@
 
 package com.netflix.bdp.s3;
 
+import java.io.IOException;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.io.IOException;
-
 
 public class S3DirectoryOutputCommitter extends S3MultipartOutputCommitter {
-  private static final Logger LOG = LoggerFactory.getLogger(
-      S3DirectoryOutputCommitter.class);
+  private static final Logger LOG = LoggerFactory.getLogger(S3DirectoryOutputCommitter.class);
 
-  public S3DirectoryOutputCommitter(Path outputPath, TaskAttemptContext context) throws IOException {
+  public S3DirectoryOutputCommitter(Path outputPath, TaskAttemptContext context)
+      throws IOException {
     super(outputPath, context);
   }
 
@@ -41,8 +40,7 @@ public class S3DirectoryOutputCommitter extends S3MultipartOutputCommitter {
     if (fs.exists(outputPath)) {
       switch (getMode(context)) {
         case FAIL:
-          throw new AlreadyExistsException(
-              "Output path already exists: " + outputPath);
+          throw new AlreadyExistsException("Output path already exists: " + outputPath);
         case APPEND:
         case REPLACE:
           // do nothing.
@@ -67,22 +65,19 @@ public class S3DirectoryOutputCommitter extends S3MultipartOutputCommitter {
         case FAIL:
           // this was checked in setupJob, but this avoids some cases where
           // output was created while the job was processing
-          throw new AlreadyExistsException(
-              "Output path already exists: " + outputPath);
+          throw new AlreadyExistsException("Output path already exists: " + outputPath);
         case APPEND:
           // do nothing
           break;
         case REPLACE:
           LOG.info("Removing output path to be replaced: " + outputPath);
-          if (!fs.delete(outputPath, true /* recursive */ )) {
+          if (!fs.delete(outputPath, true /* recursive */)) {
             throw new IOException(
-                "Failed to delete existing output directory for replace:" +
-                outputPath);
+                "Failed to delete existing output directory for replace:" + outputPath);
           }
           break;
         default:
-          throw new RuntimeException(
-              "Unknown conflict resolution mode: " + getMode(context));
+          throw new RuntimeException("Unknown conflict resolution mode: " + getMode(context));
       }
     }
 

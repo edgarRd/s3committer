@@ -16,7 +16,17 @@
 
 package com.netflix.bdp.s3;
 
+import static com.netflix.bdp.s3.S3Committer.UPLOAD_UUID;
+import static org.mockito.Mockito.mock;
+
 import com.google.common.collect.Sets;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
+import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -36,17 +46,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Set;
-import java.util.UUID;
-
-import static com.netflix.bdp.s3.S3Committer.UPLOAD_UUID;
-import static org.mockito.Mockito.mock;
-
 public class TestMRJob extends TestUtil.MiniDFSTest {
 
   private static Path S3_OUTPUT_PATH = null;
@@ -56,8 +55,7 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
   public static void setupMiniMRCluster() {
     getConfiguration().set("fs.s3.impl", MockS3FileSystem.class.getName());
     S3_OUTPUT_PATH = new Path("s3://bucket-name/output/path");
-    MR_CLUSTER = new MiniMRYarnCluster(
-        "test-s3-multipart-output-committer", 2);
+    MR_CLUSTER = new MiniMRYarnCluster("test-s3-multipart-output-committer", 2);
     MR_CLUSTER.init(getConfiguration());
     MR_CLUSTER.start();
   }
@@ -74,11 +72,10 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
     private MockedS3Committer committer = null;
 
     @Override
-    public synchronized OutputCommitter getOutputCommitter(
-        TaskAttemptContext context) throws IOException {
+    public synchronized OutputCommitter getOutputCommitter(TaskAttemptContext context)
+        throws IOException {
       if (committer == null) {
-        committer = new MockedS3Committer(
-            getOutputPath(context), context);
+        committer = new MockedS3Committer(getOutputPath(context), context);
       }
       return committer;
     }
@@ -92,8 +89,7 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
     }
   }
 
-  @Rule
-  public final TemporaryFolder temp = new TemporaryFolder();
+  @Rule public final TemporaryFolder temp = new TemporaryFolder();
 
   @Test
   public void testMRJob() throws Exception {
@@ -114,8 +110,7 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
       try (FileOutputStream out = new FileOutputStream(file)) {
         out.write(("file " + i).getBytes(StandardCharsets.UTF_8));
       }
-      expectedFiles.add(new Path(
-          S3_OUTPUT_PATH, "part-m-0000" + i + "-" + commitUUID).toString());
+      expectedFiles.add(new Path(S3_OUTPUT_PATH, "part-m-0000" + i + "-" + commitUUID).toString());
     }
 
     Job mrJob = Job.getInstance(MR_CLUSTER.getConfig(), "test-committer-job");
@@ -131,8 +126,7 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
     conf.set(UPLOAD_UUID, commitUUID);
 
     mrJob.setInputFormatClass(TextInputFormat.class);
-    TextInputFormat.addInputPath(mrJob,
-        new Path("file:" + temp.getRoot().toString()));
+    TextInputFormat.addInputPath(mrJob, new Path("file:" + temp.getRoot().toString()));
 
     mrJob.setMapperClass(M.class);
     mrJob.setNumReduceTasks(0);
@@ -141,27 +135,22 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
     Assert.assertTrue("MR job should succeed", mrJob.waitForCompletion(true));
 
     TestUtil.ClientResults results;
-    try (ObjectInputStream in = new ObjectInputStream(
-        FileSystem.getLocal(conf).open(new Path(committerPath)))) {
+    try (ObjectInputStream in =
+        new ObjectInputStream(FileSystem.getLocal(conf).open(new Path(committerPath)))) {
       results = (TestUtil.ClientResults) in.readObject();
     }
 
-    Assert.assertEquals("Should not delete files",
-        0, results.deletes.size());
+    Assert.assertEquals("Should not delete files", 0, results.deletes.size());
 
-    Assert.assertEquals("Should not abort commits",
-        0, results.aborts.size());
+    Assert.assertEquals("Should not abort commits", 0, results.aborts.size());
 
-    Assert.assertEquals("Should commit task output files",
-        numFiles, results.commits.size());
+    Assert.assertEquals("Should commit task output files", numFiles, results.commits.size());
 
     Set<String> actualFiles = Sets.newHashSet();
     for (S3MultipartUploadRef committedKey : results.commits) {
       actualFiles.add("s3://" + committedKey.bucket() + "/" + committedKey.key());
     }
 
-    Assert.assertEquals("Should commit the correct file paths",
-        expectedFiles, actualFiles);
+    Assert.assertEquals("Should commit the correct file paths", expectedFiles, actualFiles);
   }
-
 }

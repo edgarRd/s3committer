@@ -19,6 +19,7 @@ buildscript {
     gradlePluginPortal()
   }
   dependencies {
+    classpath 'com.diffplug.spotless:spotless-plugin-gradle:6.13.0'
     classpath 'com.github.johnrengelman:shadow:8.1.1'
   }
 }
@@ -26,6 +27,7 @@ buildscript {
 apply plugin: 'java'
 apply plugin: 'maven-publish' // make pom files for deployment
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.diffplug.spotless'
 
 group = "com.netflix.bdp.s3"
 version = '0.6.0'
@@ -62,6 +64,16 @@ dependencies {
   testImplementation 'org.mockito:mockito-all:1.10.19'
   testImplementation 'junit:junit:4.13.1'
 }
+
+spotless {
+  java {
+    target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+    // we use an older version of google-java-format that is compatible with JDK 8
+    googleJavaFormat("1.7")
+    removeUnusedImports()
+  }
+}
+
 
 shadowJar {
   archiveClassifier.set('shaded')

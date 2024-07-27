@@ -26,14 +26,10 @@ public class HiddenPathFilter implements PathFilter {
     return INSTANCE;
   }
 
-  private HiddenPathFilter() {
-  }
+  private HiddenPathFilter() {}
 
   @Override
   public boolean accept(Path path) {
-    return (
-        !path.getName().startsWith(".") &&
-        !path.getName().startsWith("_")
-    );
+    return (!path.getName().startsWith(".") && !path.getName().startsWith("_"));
   }
 }

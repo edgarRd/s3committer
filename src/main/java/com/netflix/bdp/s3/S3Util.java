@@ -23,6 +23,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Closeables;
 import com.netflix.bdp.s3.util.Paths;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.util.*;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
@@ -32,46 +35,42 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
-import java.io.*;
-import java.nio.ByteBuffer;
-import java.util.*;
-
 public class S3Util {
 
   private static final Logger LOG = LoggerFactory.getLogger(S3Util.class);
 
-  public static void revertCommit(S3Client client,
-                                  PendingUpload commit) {
+  public static void revertCommit(S3Client client, PendingUpload commit) {
     client.deleteObject(commit.newDeleteRequest());
   }
 
-  public static void finishCommit(S3Client client,
-                                  PendingUpload commit) {
+  public static void finishCommit(S3Client client, PendingUpload commit) {
     client.completeMultipartUpload(commit.newCompleteRequest());
   }
 
-  public static void abortCommit(S3Client client,
-                                 PendingUpload commit) {
+  public static void abortCommit(S3Client client, PendingUpload commit) {
     client.abortMultipartUpload(commit.newAbortRequest());
   }
 
   public static PendingUpload multipartUpload(
-          S3Client client, File localFile, String partition,
-          String bucket, String key, int uploadPartSize) {
+      S3Client client,
+      File localFile,
+      String partition,
+      String bucket,
+      String key,
+      int uploadPartSize) {
     Preconditions.checkArgument(localFile.length() > 0, "Cannot upload 0 byte file: " + localFile);
 
     // Initiate a multipart upload
-    CreateMultipartUploadRequest createRequest = CreateMultipartUploadRequest.builder()
-            .bucket(bucket)
-            .key(key)
-            .build();
+    CreateMultipartUploadRequest createRequest =
+        CreateMultipartUploadRequest.builder().bucket(bucket).key(key).build();
 
     CreateMultipartUploadResponse createResponse = client.createMultipartUpload(createRequest);
     String uploadId = createResponse.uploadId();
 
     // Prepare the parts to be uploaded
     Map<Integer, String> partToEtag = Maps.newLinkedHashMap();
-    ByteBuffer buffer = ByteBuffer.allocate(uploadPartSize); // Set your preferred part size (5 MB in this example)
+    ByteBuffer buffer =
+        ByteBuffer.allocate(uploadPartSize); // Set your preferred part size (5 MB in this example)
     int partNumber = 1;
     boolean threw = true;
     try (RandomAccessFile file = new RandomAccessFile(localFile, "r")) {
@@ -83,7 +82,8 @@ public class S3Util {
         int bytesRead = file.getChannel().read(buffer);
 
         buffer.flip();
-        UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+        UploadPartRequest uploadPartRequest =
+            UploadPartRequest.builder()
                 .bucket(bucket)
                 .key(key)
                 .uploadId(uploadId)
@@ -91,7 +91,8 @@ public class S3Util {
                 .contentLength((long) bytesRead)
                 .build();
 
-        UploadPartResponse response = client.uploadPart(uploadPartRequest, RequestBody.fromByteBuffer(buffer));
+        UploadPartResponse response =
+            client.uploadPart(uploadPartRequest, RequestBody.fromByteBuffer(buffer));
         partToEtag.put(partNumber, response.eTag());
 
         buffer.clear();
@@ -109,7 +110,11 @@ public class S3Util {
       if (threw) {
         try {
           client.abortMultipartUpload(
-                  AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build());
+              AbortMultipartUploadRequest.builder()
+                  .bucket(bucket)
+                  .key(key)
+                  .uploadId(uploadId)
+                  .build());
         } catch (SdkException e) {
           LOG.error("Failed to abort multi-part upload", e);
         }
@@ -117,8 +122,7 @@ public class S3Util {
     }
   }
 
-  static List<PendingUpload> readPendingCommits(FileSystem fs,
-                                                Path pendingCommitsFile)
+  static List<PendingUpload> readPendingCommits(FileSystem fs, Path pendingCommitsFile)
       throws IOException {
     List<PendingUpload> commits = Lists.newArrayList();
 
@@ -183,8 +187,8 @@ public class S3Util {
   }
 
   /**
-   * This class is used to pass information about pending uploads from tasks to
-   * the job committer. It is serializable and will instantiate S3 requests.
+   * This class is used to pass information about pending uploads from tasks to the job committer.
+   * It is serializable and will instantiate S3 requests.
    */
   public static class PendingUpload implements Serializable {
     private final String partition;
@@ -193,8 +197,8 @@ public class S3Util {
     private final String uploadId;
     private final SortedMap<Integer, String> parts;
 
-    public PendingUpload(String partition, String bucket, String key,
-                         String uploadId, Map<Integer, String> etags) {
+    public PendingUpload(
+        String partition, String bucket, String key, String uploadId, Map<Integer, String> etags) {
       this.partition = partition;
       this.bucket = bucket;
       this.key = key;
@@ -206,18 +210,16 @@ public class S3Util {
       final List<CompletedPart> partsCopy = Lists.newArrayList();
 
       for (Map.Entry<Integer, String> entry : parts.entrySet()) {
-        partsCopy.add(CompletedPart.builder()
-            .partNumber(entry.getKey())
-            .eTag(entry.getValue())
-            .build());
+        partsCopy.add(
+            CompletedPart.builder().partNumber(entry.getKey()).eTag(entry.getValue()).build());
       }
 
       return CompleteMultipartUploadRequest.builder()
-              .bucket(bucket)
-              .key(key)
-              .uploadId(uploadId)
-              .multipartUpload(CompletedMultipartUpload.builder().parts(partsCopy).build())
-              .build();
+          .bucket(bucket)
+          .key(key)
+          .uploadId(uploadId)
+          .multipartUpload(CompletedMultipartUpload.builder().parts(partsCopy).build())
+          .build();
     }
 
     public DeleteObjectRequest newDeleteRequest() {
@@ -225,7 +227,11 @@ public class S3Util {
     }
 
     public AbortMultipartUploadRequest newAbortRequest() {
-      return AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build();
+      return AbortMultipartUploadRequest.builder()
+          .bucket(bucket)
+          .key(key)
+          .uploadId(uploadId)
+          .build();
     }
 
     public String getBucketName() {

@@ -16,8 +16,19 @@
 
 package com.netflix.bdp.s3;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Callable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,19 +38,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import software.amazon.awssdk.services.s3.S3Client;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
-public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3PartitionedOutputCommitter> {
+public class TestS3PartitionedJobCommit
+    extends TestUtil.JobCommitterTest<S3PartitionedOutputCommitter> {
   @Override
   S3PartitionedOutputCommitter newJobCommitter() throws IOException {
     return new TestPartitionedOutputCommitter(getJob(), mock(S3Client.class));
@@ -47,6 +47,7 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
   private static class TestPartitionedOutputCommitter extends S3PartitionedOutputCommitter {
     private final S3Client client;
+
     private TestPartitionedOutputCommitter(TaskAttemptContext context, S3Client client)
         throws IOException {
       super(OUTPUT_PATH, context);
@@ -59,17 +60,27 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
     }
 
     @Override
-    protected List<S3Util.PendingUpload> getPendingUploads(JobContext context)
-        throws IOException {
+    protected List<S3Util.PendingUpload> getPendingUploads(JobContext context) throws IOException {
       List<S3Util.PendingUpload> pending = Lists.newArrayList();
 
       for (String dateint : Arrays.asList("20161115", "20161116")) {
         for (String hour : Arrays.asList("13", "14")) {
-          String key = OUTPUT_PREFIX + "/dateint=" + dateint + "/hour=" + hour +
-              "/" + UUID.randomUUID().toString() + ".parquet";
-          pending.add(new S3Util.PendingUpload(null,
-              MockS3FileSystem.BUCKET, key, UUID.randomUUID().toString(),
-              Maps.<Integer, String>newHashMap()));
+          String key =
+              OUTPUT_PREFIX
+                  + "/dateint="
+                  + dateint
+                  + "/hour="
+                  + hour
+                  + "/"
+                  + UUID.randomUUID().toString()
+                  + ".parquet";
+          pending.add(
+              new S3Util.PendingUpload(
+                  null,
+                  MockS3FileSystem.BUCKET,
+                  key,
+                  UUID.randomUUID().toString(),
+                  Maps.<Integer, String>newHashMap()));
         }
       }
 
@@ -79,9 +90,9 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
     private boolean aborted = false;
 
     @Override
-    protected void abortJobInternal(JobContext context,
-                                    List<S3Util.PendingUpload> pending,
-                                    boolean suppressExceptions) throws IOException {
+    protected void abortJobInternal(
+        JobContext context, List<S3Util.PendingUpload> pending, boolean suppressExceptions)
+        throws IOException {
       this.aborted = true;
       super.abortJobInternal(context, pending, suppressExceptions);
     }
@@ -105,18 +116,15 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
       // parent and peer directories exist
       reset(mockS3);
-      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116")))
-          .thenReturn(true);
-      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=10")))
-          .thenReturn(true);
+      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116"))).thenReturn(true);
+      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=10"))).thenReturn(true);
       committer.commitJob(getJob());
       verifyNoMoreInteractions(mockS3);
 
       // a leaf directory exists.
       // NOTE: this is not checked during job commit, the commit succeeds.
       reset(mockS3);
-      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14")))
-          .thenReturn(true);
+      when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"))).thenReturn(true);
       committer.commitJob(getJob());
       verifyNoMoreInteractions(mockS3);
     }
@@ -139,10 +147,8 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     // parent and peer directories exist
     reset(mockS3);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115")))
-        .thenReturn(true);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=12")))
-        .thenReturn(true);
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115"))).thenReturn(true);
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=12"))).thenReturn(true);
 
     committer.commitJob(getJob());
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
@@ -153,21 +159,14 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     // partition directories exist and should be removed
     reset(mockS3);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=12")))
-        .thenReturn(true);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13")))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161115/hour=13"),
-            true /* recursive */ ))
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=12"))).thenReturn(true);
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"))).thenReturn(true);
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"), true /* recursive */))
         .thenReturn(true);
 
     committer.commitJob(getJob());
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161115/hour=13"),
-        true /* recursive */ );
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"), true /* recursive */);
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"));
@@ -175,32 +174,20 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     // partition directories exist and should be removed
     reset(mockS3);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13")))
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"))).thenReturn(true);
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"))).thenReturn(true);
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"), true /* recursive */))
         .thenReturn(true);
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14")))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161116/hour=13"),
-            true /* recursive */ ))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161116/hour=14"),
-            true /* recursive */ ))
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"), true /* recursive */))
         .thenReturn(true);
 
     committer.commitJob(getJob());
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161116/hour=13"),
-        true /* recursive */ );
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"), true /* recursive */);
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161116/hour=14"),
-        true /* recursive */ );
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"), true /* recursive */);
     verifyNoMoreInteractions(mockS3);
   }
 
@@ -212,32 +199,25 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13")))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161115/hour=13"),
-            true /* recursive */ ))
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"))).thenReturn(true);
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"), true /* recursive */))
         .thenReturn(true);
     when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14")))
         .thenThrow(new IOException("Fake IOException for exists"));
 
-    TestUtil.assertThrows("Should throw the fake IOException",
-        IOException.class, new Callable<Void>() {
-      @Override
-      public Void call() throws IOException {
-        committer.commitJob(getJob());
-        return null;
-      }
-    });
+    TestUtil.assertThrows(
+        "Should throw the fake IOException",
+        IOException.class,
+        (Callable<Void>)
+            () -> {
+              committer.commitJob(getJob());
+              return null;
+            });
 
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161115/hour=13"),
-        true /* recursive */ );
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"), true /* recursive */);
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"));
-    Assert.assertTrue("Should have aborted",
-        ((TestPartitionedOutputCommitter) committer).aborted);
+    Assert.assertTrue("Should have aborted", ((TestPartitionedOutputCommitter) committer).aborted);
     verifyNoMoreInteractions(mockS3);
   }
 
@@ -249,32 +229,25 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14")))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161116/hour=14"),
-            true /* recursive */ ))
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"))).thenReturn(true);
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"), true /* recursive */))
         .thenThrow(new IOException("Fake IOException for delete"));
 
-    TestUtil.assertThrows("Should throw the fake IOException",
-        IOException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws IOException {
-            committer.commitJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw the fake IOException",
+        IOException.class,
+        (Callable<Void>)
+            () -> {
+              committer.commitJob(getJob());
+              return null;
+            });
 
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161116/hour=14"),
-        true /* recursive */ );
-    Assert.assertTrue("Should have aborted",
-        ((TestPartitionedOutputCommitter) committer).aborted);
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=14"), true /* recursive */);
+    Assert.assertTrue("Should have aborted", ((TestPartitionedOutputCommitter) committer).aborted);
     verifyNoMoreInteractions(mockS3);
   }
 
@@ -286,31 +259,24 @@ public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3Part
 
     final S3PartitionedOutputCommitter committer = newJobCommitter();
 
-    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13")))
-        .thenReturn(true);
-    when(mockS3
-        .delete(
-            new Path(OUTPUT_PATH, "dateint=20161116/hour=13"),
-            true /* recursive */ ))
+    when(mockS3.exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"))).thenReturn(true);
+    when(mockS3.delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"), true /* recursive */))
         .thenReturn(false);
 
-    TestUtil.assertThrows("Should throw an IOException",
-        IOException.class, new Callable<Void>() {
-          @Override
-          public Void call() throws IOException {
-            committer.commitJob(getJob());
-            return null;
-          }
-        });
+    TestUtil.assertThrows(
+        "Should throw an IOException",
+        IOException.class,
+        (Callable<Void>)
+            () -> {
+              committer.commitJob(getJob());
+              return null;
+            });
 
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=13"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161115/hour=14"));
     verify(mockS3).exists(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"));
-    verify(mockS3).delete(
-        new Path(OUTPUT_PATH, "dateint=20161116/hour=13"),
-        true /* recursive */ );
-    Assert.assertTrue("Should have aborted",
-        ((TestPartitionedOutputCommitter) committer).aborted);
+    verify(mockS3).delete(new Path(OUTPUT_PATH, "dateint=20161116/hour=13"), true /* recursive */);
+    Assert.assertTrue("Should have aborted", ((TestPartitionedOutputCommitter) committer).aborted);
     verifyNoMoreInteractions(mockS3);
   }
 }
