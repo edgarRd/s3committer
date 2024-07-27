@@ -18,7 +18,7 @@ package com.netflix.bdp.s3;
 
 public class S3Committer {
   public static final String UPLOAD_SIZE = "s3.multipart.committer.upload.size";
-  public static final long DEFAULT_UPLOAD_SIZE = 10485760L; // 10 MB
+  public static final int DEFAULT_UPLOAD_SIZE = 10485760; // 10 MB
   public static final String UPLOAD_UUID = "s3.multipart.committer.uuid";
   public static final String CONFLICT_MODE = "s3.multipart.committer.conflict-mode";
   public static final String NUM_THREADS = "s3.multipart.committer.num-threads";

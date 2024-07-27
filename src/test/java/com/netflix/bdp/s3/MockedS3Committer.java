@@ -16,7 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
 import com.netflix.bdp.s3.TestUtil.ClientErrors;
 import com.netflix.bdp.s3.TestUtil.ClientResults;
 import org.apache.hadoop.conf.Configuration;
@@ -24,6 +23,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import software.amazon.awssdk.services.s3.S3Client;
+
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 
@@ -34,7 +35,7 @@ class MockedS3Committer extends S3MultipartOutputCommitter {
 
   public final ClientResults results = new ClientResults();
   public final ClientErrors errors = new ClientErrors();
-  private final AmazonS3 mockClient = TestUtil.newMockClient(results, errors);
+  private final S3Client mockClient = TestUtil.newMockClient(results, errors);
 
   public MockedS3Committer(Path outputPath, TaskAttemptContext context)
       throws IOException {
@@ -42,7 +43,7 @@ class MockedS3Committer extends S3MultipartOutputCommitter {
   }
 
   @Override
-  protected AmazonS3 findClient(Path path, Configuration conf) {
+  protected S3Client findClient(Path path, Configuration conf) {
     return mockClient;
   }
 

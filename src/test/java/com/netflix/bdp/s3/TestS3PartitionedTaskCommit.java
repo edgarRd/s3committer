@@ -16,8 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.netflix.bdp.s3.util.Paths;
@@ -28,6 +26,9 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -64,16 +65,16 @@ public class TestS3PartitionedTaskCommit extends TestUtil.TaskCommitterTest<S3Pa
   }
 
   private static class TestPartitionedCommitter extends S3PartitionedOutputCommitter {
-    private final AmazonS3 mockClient;
+    private final S3Client mockClient;
 
     public TestPartitionedCommitter(TaskAttemptContext context,
-                                    AmazonS3 mockClient) throws IOException {
+                                    S3Client mockClient) throws IOException {
       super(OUTPUT_PATH, context);
       this.mockClient = mockClient;
     }
 
     @Override
-    protected Object findClient(Path path, Configuration conf) {
+    protected S3Client findClient(Path path, Configuration conf) {
       return mockClient;
     }
   }
@@ -109,9 +110,9 @@ public class TestS3PartitionedTaskCommit extends TestUtil.TaskCommitterTest<S3Pa
 
     committer.commitTask(getTAC());
     Set<String> files = Sets.newHashSet();
-    for (InitiateMultipartUploadRequest request : getMockResults().getRequests().values()) {
-      Assert.assertEquals(MockS3FileSystem.BUCKET, request.getBucketName());
-      files.add(request.getKey());
+    for (S3MultipartUploadRef request : getMockResults().getRequests()) {
+      Assert.assertEquals(MockS3FileSystem.BUCKET, request.bucket());
+      files.add(request.key());
     }
     Assert.assertEquals("Should have the right number of uploads",
         relativeFiles.size(), files.size());
@@ -159,9 +160,9 @@ public class TestS3PartitionedTaskCommit extends TestUtil.TaskCommitterTest<S3Pa
 
     committer.commitTask(getTAC());
     Set<String> files = Sets.newHashSet();
-    for (InitiateMultipartUploadRequest request : getMockResults().getRequests().values()) {
-      Assert.assertEquals(MockS3FileSystem.BUCKET, request.getBucketName());
-      files.add(request.getKey());
+    for (S3MultipartUploadRef request : getMockResults().getRequests()) {
+      Assert.assertEquals(MockS3FileSystem.BUCKET, request.bucket());
+      files.add(request.key());
     }
     Assert.assertEquals("Should have the right number of uploads",
         relativeFiles.size(), files.size());
@@ -196,9 +197,9 @@ public class TestS3PartitionedTaskCommit extends TestUtil.TaskCommitterTest<S3Pa
 
     committer.commitTask(getTAC());
     Set<String> files = Sets.newHashSet();
-    for (InitiateMultipartUploadRequest request : getMockResults().getRequests().values()) {
-      Assert.assertEquals(MockS3FileSystem.BUCKET, request.getBucketName());
-      files.add(request.getKey());
+    for (S3MultipartUploadRef request : getMockResults().getRequests()) {
+      Assert.assertEquals(MockS3FileSystem.BUCKET, request.bucket());
+      files.add(request.key());
     }
     Assert.assertEquals("Should have the right number of uploads",
         relativeFiles.size(), files.size());
@@ -235,9 +236,9 @@ public class TestS3PartitionedTaskCommit extends TestUtil.TaskCommitterTest<S3Pa
 
     committer.commitTask(getTAC());
     Set<String> files = Sets.newHashSet();
-    for (InitiateMultipartUploadRequest request : getMockResults().getRequests().values()) {
-      Assert.assertEquals(MockS3FileSystem.BUCKET, request.getBucketName());
-      files.add(request.getKey());
+    for (S3MultipartUploadRef request : getMockResults().getRequests()) {
+      Assert.assertEquals(MockS3FileSystem.BUCKET, request.bucket());
+      files.add(request.key());
     }
     Assert.assertEquals("Should have the right number of uploads",
         relativeFiles.size(), files.size());

@@ -16,7 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -26,6 +25,8 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.junit.Assert;
 import org.junit.Test;
+import software.amazon.awssdk.services.s3.S3Client;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -41,19 +42,19 @@ import static org.mockito.Mockito.when;
 public class TestS3PartitionedJobCommit extends TestUtil.JobCommitterTest<S3PartitionedOutputCommitter> {
   @Override
   S3PartitionedOutputCommitter newJobCommitter() throws IOException {
-    return new TestPartitionedOutputCommitter(getJob(), mock(AmazonS3.class));
+    return new TestPartitionedOutputCommitter(getJob(), mock(S3Client.class));
   }
 
   private static class TestPartitionedOutputCommitter extends S3PartitionedOutputCommitter {
-    private final AmazonS3 client;
-    private TestPartitionedOutputCommitter(TaskAttemptContext context, AmazonS3 client)
+    private final S3Client client;
+    private TestPartitionedOutputCommitter(TaskAttemptContext context, S3Client client)
         throws IOException {
       super(OUTPUT_PATH, context);
       this.client = client;
     }
 
     @Override
-    protected Object findClient(Path path, Configuration conf) {
+    protected S3Client findClient(Path path, Configuration conf) {
       return client;
     }
 

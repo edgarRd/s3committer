@@ -16,8 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -36,6 +34,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.parquet.hadoop.ParquetOutputCommitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -54,13 +55,13 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
       S3MultipartOutputCommitter.class);
 
   private final Path constructorOutputPath;
-  private final long uploadPartSize;
+  private final int uploadPartSize;
   private final String uuid;
   private final Path workPath;
   private final FileOutputCommitter wrappedCommitter;
 
   // lazy variables
-  private AmazonS3 client = null;
+  private S3Client client = null;
   private ConflictResolution mode = null;
   private ExecutorService threadPool = null;
   private Path finalOutputPath = null;
@@ -77,7 +78,7 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
 
     Configuration conf = context.getConfiguration();
 
-    this.uploadPartSize = conf.getLong(
+    this.uploadPartSize = conf.getInt(
         S3Committer.UPLOAD_SIZE, S3Committer.DEFAULT_UPLOAD_SIZE);
     // Spark will use a fake app id based on the current minute and job id 0.
     // To avoid collisions, use the YARN application ID for Spark.
@@ -108,39 +109,39 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
   }
 
   /**
-   * Returns an {@link AmazonS3} client. This should be overridden by
+   * Returns a {@link S3Client} client. This should be overridden by
    * subclasses to provide access to a configured client.
    *
    * @param path the output S3 path (with bucket)
    * @param conf a Hadoop {@link Configuration}
-   * @return a {@link AmazonS3} client
+   * @return a {@link S3Client} client
    */
-  protected Object findClient(Path path, Configuration conf) {
-    return new AmazonS3Client();
+  protected S3Client findClient(Path path, Configuration conf) {
+    return S3Client.builder().region(Region.US_EAST_1).build();
   }
 
   /**
-   * Getter for the cached {@link AmazonS3} client. Subclasses should call this
+   * Getter for the cached {@link S3Client} client. Subclasses should call this
    * method to get a client instance.
    *
    * @param path the output S3 path (with bucket)
    * @param conf a Hadoop {@link Configuration}
-   * @return a {@link AmazonS3} client
+   * @return a {@link S3Client} client
    */
-  protected AmazonS3 getClient(Path path, Configuration conf) {
+  protected S3Client getClient(Path path, Configuration conf) {
     if (client != null) {
       return client;
     }
 
     Object found = findClient(path, conf);
-    if (found instanceof AmazonS3) {
-      this.client = (AmazonS3) found;
+    if (found instanceof S3Client) {
+      this.client = (S3Client) found;
       return client;
     }
 
     if (found != null) {
       throw new RuntimeException("Failed to find a valid S3 client: " +
-          found + " is not a " + AmazonS3.class.getName());
+          found + " is not a " + S3Client.class.getName());
     }
 
     throw new RuntimeException("Failed to find a S3 client");
@@ -272,7 +273,7 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
   protected void commitJobInternal(JobContext context,
                                    List<S3Util.PendingUpload> pending)
       throws IOException {
-    final AmazonS3 client = getClient(
+    final S3Client client = getClient(
         getOutputPath(context), context.getConfiguration());
 
     boolean threw = true;
@@ -324,7 +325,7 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
                                   List<S3Util.PendingUpload> pending,
                                   boolean suppressExceptions)
       throws IOException {
-    final AmazonS3 client = getClient(
+    final S3Client client = getClient(
         getOutputPath(context), context.getConfiguration());
 
     boolean threw = true;
@@ -396,7 +397,7 @@ class S3MultipartOutputCommitter extends ParquetOutputCommitter {
                                     Iterable<FileStatus> taskOutput)
       throws IOException {
     Configuration conf = context.getConfiguration();
-    final AmazonS3 client = getClient(getOutputPath(context), conf);
+    final S3Client client = getClient(getOutputPath(context), conf);
 
     final Path attemptPath = getTaskAttemptPath(context);
     FileSystem attemptFS = attemptPath.getFileSystem(conf);

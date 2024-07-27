@@ -28,7 +28,7 @@ apply plugin: 'maven-publish' // make pom files for deployment
 apply plugin: 'com.github.johnrengelman.shadow'
 
 group = "com.netflix.bdp.s3"
-version = '0.5.5'
+version = '0.6.0'
 
 repositories {
   mavenCentral()
@@ -46,15 +46,13 @@ targetCompatibility = '1.8'
 
 dependencies {
   compileOnly 'org.apache.parquet:parquet-hadoop:1.10.1'
-  compileOnly 'com.amazonaws:aws-java-sdk-s3:1.11.813'
   compileOnly 'org.apache.hadoop:hadoop-client:2.8.5'
-  compileOnly 'org.apache.hadoop:hadoop-aws:2.8.5'
   compileOnly 'org.slf4j:slf4j-api:1.7.5'
-  implementation 'com.google.guava:guava:19.0'
+  compileOnly 'software.amazon.awssdk:s3:2.20.131'
+  compileOnly 'com.google.guava:guava:19.0'
 
   testImplementation 'org.apache.parquet:parquet-hadoop:1.10.1'
-  testImplementation 'com.amazonaws:aws-java-sdk-s3:1.11.813'
-  testImplementation 'org.apache.hadoop:hadoop-aws:2.8.5'
+  testImplementation 'software.amazon.awssdk:s3:2.20.131'
   testImplementation 'org.apache.hadoop:hadoop-client:2.8.5'
   testImplementation 'org.apache.hadoop:hadoop-minicluster:2.8.5'
   testImplementation 'org.apache.hadoop:hadoop-hdfs:2.8.5:tests'
@@ -67,7 +65,4 @@ dependencies {
 
 shadowJar {
   archiveClassifier.set('shaded')
-
-  configurations = [project.configurations.shadow]
-  from(project.sourceSets.main.output)
 }

@@ -16,7 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
 import com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -36,6 +35,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -156,8 +156,8 @@ public class TestMRJob extends TestUtil.MiniDFSTest {
         numFiles, results.commits.size());
 
     Set<String> actualFiles = Sets.newHashSet();
-    for (CompleteMultipartUploadRequest commit : results.commits) {
-      actualFiles.add("s3://" + commit.getBucketName() + "/" + commit.getKey());
+    for (S3MultipartUploadRef committedKey : results.commits) {
+      actualFiles.add("s3://" + committedKey.bucket() + "/" + committedKey.key());
     }
 
     Assert.assertEquals("Should commit the correct file paths",

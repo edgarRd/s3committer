@@ -16,10 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -40,6 +36,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -258,7 +258,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         UUID.randomUUID().toString(), 10);
 
     TestUtil.assertThrows("Should fail during init",
-        AmazonClientException.class, "Fail on init 1",
+        SdkException.class, "Fail on init 1",
         new Callable<Void>() {
           @Override
           public Void call() throws IOException {
@@ -289,7 +289,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         UUID.randomUUID().toString(), 10);
 
     TestUtil.assertThrows("Should fail during upload",
-        AmazonClientException.class, "Fail on upload 2",
+        SdkException.class, "Fail on upload 2",
         new Callable<Void>() {
           @Override
           public Void call() throws IOException {
@@ -302,7 +302,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         1, committer.results.getUploads().size());
     Assert.assertEquals("Should abort the upload",
         committer.results.getUploads().get(0),
-        committer.results.getAborts().get(0).getUploadId());
+        committer.results.getAborts().get(0).uploadId());
     Assert.assertFalse("Should remove the attempt path",
         fs.exists(attemptPath));
   }
@@ -322,7 +322,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         UUID.randomUUID().toString(), 10);
 
     TestUtil.assertThrows("Should fail during upload",
-        AmazonClientException.class, "Fail on upload 5",
+        SdkException.class, "Fail on upload 5",
         new Callable<Void>() {
           @Override
           public Void call() throws IOException {
@@ -357,7 +357,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
 
     TestUtil.assertThrows(
         "Should suppress abort failure, propagate upload failure",
-        AmazonClientException.class, "Fail on upload 5",
+        SdkException.class, "Fail on upload 5",
         new Callable<Void>() {
           @Override
           public Void call() throws IOException {
@@ -431,7 +431,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
     jobCommitter.errors.failOnCommit(5);
 
     TestUtil.assertThrows("Should propagate the commit failure",
-        AmazonClientException.class, "Fail on commit 5", new Callable<Void>() {
+        SdkException.class, "Fail on commit 5", new Callable<Void>() {
           @Override
           public Void call() throws IOException {
             jobCommitter.commitJob(job);
@@ -446,13 +446,13 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
         5, jobCommitter.results.getDeletes().size());
 
     Set<String> commits = Sets.newHashSet();
-    for (CompleteMultipartUploadRequest commit : jobCommitter.results.getCommits()) {
-      commits.add(commit.getBucketName() + commit.getKey());
+    for (S3MultipartUploadRef s3commit : jobCommitter.results.getCommits()) {
+      commits.add(s3commit.bucket() + s3commit.key());
     }
 
     Set<String> deletes = Sets.newHashSet();
-    for (DeleteObjectRequest delete : jobCommitter.results.getDeletes()) {
-      deletes.add(delete.getBucketName() + delete.getKey());
+    for (S3Ref delete : jobCommitter.results.getDeletes()) {
+      deletes.add(delete.bucket() + delete.key());
     }
 
     Assert.assertEquals("Committed and deleted objects should match",
@@ -483,7 +483,7 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
     jobCommitter.errors.recoverAfterFailure();
 
     TestUtil.assertThrows("Should propagate the abort failure",
-        AmazonClientException.class, "Fail on abort 5", new Callable<Void>() {
+        SdkException.class, "Fail on abort 5", new Callable<Void>() {
           @Override
           public Void call() throws IOException {
             jobCommitter.abortJob(job, JobStatus.State.KILLED);
@@ -550,20 +550,18 @@ public class TestS3MultipartOutputCommitter extends TestUtil.MiniDFSTest {
     return uploads;
   }
 
-  private static Set<String> getAbortedIds(
-      List<AbortMultipartUploadRequest> aborts) {
+  private static Set<String> getAbortedIds(List<S3MultipartUploadRef> aborts) {
     Set<String> abortedUploads = Sets.newHashSet();
-    for (AbortMultipartUploadRequest abort : aborts) {
-      abortedUploads.add(abort.getUploadId());
+    for (S3MultipartUploadRef abort : aborts) {
+      abortedUploads.add(abort.uploadId());
     }
     return abortedUploads;
   }
 
-  private static Set<String> getCommittedIds(
-      List<CompleteMultipartUploadRequest> commits) {
+  private static Set<String> getCommittedIds(List<S3MultipartUploadRef> commits) {
     Set<String> committedUploads = Sets.newHashSet();
-    for (CompleteMultipartUploadRequest commit : commits) {
-      committedUploads.add(commit.getUploadId());
+    for (S3MultipartUploadRef s3commit : commits) {
+      committedUploads.add(s3commit.uploadId());
     }
     return committedUploads;
   }

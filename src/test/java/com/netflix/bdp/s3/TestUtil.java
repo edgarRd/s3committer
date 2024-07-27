@@ -16,31 +16,18 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadResult;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadResult;
-import com.amazonaws.services.s3.model.UploadPartRequest;
-import com.amazonaws.services.s3.model.UploadPartResult;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.TaskID;
 import org.apache.hadoop.mapreduce.TaskType;
-import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -48,6 +35,11 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Serializable;
@@ -128,7 +120,7 @@ public class TestUtil {
     // created in Before
     private TestUtil.ClientResults results = null;
     private TestUtil.ClientErrors errors = null;
-    private AmazonS3 mockClient = null;
+    private S3Client mockClient = null;
 
     @BeforeClass
     public static void setupMockS3FileSystem() {
@@ -170,7 +162,7 @@ public class TestUtil {
       return errors;
     }
 
-    protected AmazonS3 getMockClient() {
+    protected S3Client getMockClient() {
       return mockClient;
     }
 
@@ -211,17 +203,15 @@ public class TestUtil {
 
   public static class ClientResults implements Serializable {
     // For inspection of what the committer did
-    public final Map<String, InitiateMultipartUploadRequest> requests =
-        Maps.newHashMap();
+    public final List<S3MultipartUploadRef> requests = Lists.newArrayList();
     public final List<String> uploads = Lists.newArrayList();
-    public final List<UploadPartRequest> parts = Lists.newArrayList();
+    public final Map<S3MultipartUploadRef, Integer> parts = Maps.newLinkedHashMap();
     public final Map<String, List<String>> tagsByUpload = Maps.newHashMap();
-    public final List<CompleteMultipartUploadRequest> commits =
-        Lists.newArrayList();
-    public final List<AbortMultipartUploadRequest> aborts = Lists.newArrayList();
-    public final List<DeleteObjectRequest> deletes = Lists.newArrayList();
+    public final List<S3MultipartUploadRef> commits = Lists.newArrayList();
+    public final List<S3MultipartUploadRef> aborts = Lists.newArrayList();
+    public final List<S3Ref> deletes = Lists.newArrayList();
 
-    public Map<String, InitiateMultipartUploadRequest> getRequests() {
+    public List<S3MultipartUploadRef> getRequests() {
       return requests;
     }
 
@@ -229,7 +219,7 @@ public class TestUtil {
       return uploads;
     }
 
-    public List<UploadPartRequest> getParts() {
+    public Map<S3MultipartUploadRef, Integer> getParts() {
       return parts;
     }
 
@@ -237,15 +227,15 @@ public class TestUtil {
       return tagsByUpload;
     }
 
-    public List<CompleteMultipartUploadRequest> getCommits() {
+    public List<S3MultipartUploadRef> getCommits() {
       return commits;
     }
 
-    public List<AbortMultipartUploadRequest> getAborts() {
+    public List<S3MultipartUploadRef> getAborts() {
       return aborts;
     }
 
-    public List<DeleteObjectRequest> getDeletes() {
+    public List<S3Ref> getDeletes() {
       return deletes;
     }
   }
@@ -279,56 +269,49 @@ public class TestUtil {
     }
   }
 
-  public static AmazonS3 newMockClient(final ClientResults results,
+  public static S3Client newMockClient(final ClientResults results,
                                        final ClientErrors errors) {
-    AmazonS3Client mockClient = mock(AmazonS3Client.class);
+    S3Client mockClient = mock(S3Client.class);
     final Object lock = new Object();
 
-    when(mockClient
-        .initiateMultipartUpload(any(InitiateMultipartUploadRequest.class)))
-        .thenAnswer(new Answer<InitiateMultipartUploadResult>() {
+    when(mockClient.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+        .thenAnswer(new Answer<CreateMultipartUploadResponse>() {
           @Override
-          public InitiateMultipartUploadResult answer(
+          public CreateMultipartUploadResponse answer(
               InvocationOnMock invocation) throws Throwable {
             synchronized (lock) {
               if (results.requests.size() == errors.failOnInit) {
                 if (errors.recover) {
                   errors.failOnInit(-1);
                 }
-                throw new AmazonClientException(
-                    "Fail on init " + results.requests.size());
+                throw SdkException.builder().message("Fail on init " + results.requests.size()).build();
               }
+
               String uploadId = UUID.randomUUID().toString();
-              results.requests.put(uploadId, invocation.getArgumentAt(
-                  0, InitiateMultipartUploadRequest.class));
+              CreateMultipartUploadRequest req = invocation.getArgumentAt(0, CreateMultipartUploadRequest.class);
+              S3MultipartUploadRef ref = S3MultipartUploadRef.of(req.bucket(), req.key(), uploadId);
+              results.requests.add(ref);
               results.uploads.add(uploadId);
-              return newResult(results.requests.get(uploadId), uploadId);
+              return newResult(ref);
             }
           }
         });
 
-    when(mockClient.uploadPart(any(UploadPartRequest.class)))
-        .thenAnswer(new Answer<UploadPartResult>() {
+    when(mockClient.uploadPart(any(UploadPartRequest.class), any(RequestBody.class)))
+        .thenAnswer(new Answer<UploadPartResponse>() {
           @Override
-          public UploadPartResult answer(InvocationOnMock invocation)
-              throws Throwable {
+          public UploadPartResponse answer(InvocationOnMock invocation) throws Throwable {
             synchronized (lock) {
               if (results.parts.size() == errors.failOnUpload) {
                 if (errors.recover) {
                   errors.failOnUpload(-1);
                 }
-                throw new AmazonClientException(
-                    "Fail on upload " + results.parts.size());
+                throw SdkException.builder().message("Fail on upload " + results.parts.size()).build();
               }
-              UploadPartRequest req = invocation.getArgumentAt(
-                  0, UploadPartRequest.class);
-              results.parts.add(req);
+              UploadPartRequest req = invocation.getArgumentAt(0, UploadPartRequest.class);
+              results.parts.put(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()), req.partNumber());
               String etag = UUID.randomUUID().toString();
-              List<String> etags = results.tagsByUpload.get(req.getUploadId());
-              if (etags == null) {
-                etags = Lists.newArrayList();
-                results.tagsByUpload.put(req.getUploadId(), etags);
-              }
+              List<String> etags = results.tagsByUpload.computeIfAbsent(req.uploadId(), k -> Lists.newArrayList());
               etags.add(etag);
               return newResult(req, etag);
             }
@@ -337,21 +320,20 @@ public class TestUtil {
 
     when(mockClient
         .completeMultipartUpload(any(CompleteMultipartUploadRequest.class)))
-        .thenAnswer(new Answer<CompleteMultipartUploadResult>() {
+        .thenAnswer(new Answer<CompleteMultipartUploadResponse>() {
           @Override
-          public CompleteMultipartUploadResult answer(
+          public CompleteMultipartUploadResponse answer(
               InvocationOnMock invocation) throws Throwable {
             synchronized (lock) {
               if (results.commits.size() == errors.failOnCommit) {
                 if (errors.recover) {
                   errors.failOnCommit(-1);
                 }
-                throw new AmazonClientException(
-                    "Fail on commit " + results.commits.size());
+                throw SdkException.builder().message("Fail on commit " + results.commits.size()).build();
               }
               CompleteMultipartUploadRequest req = invocation.getArgumentAt(
                   0, CompleteMultipartUploadRequest.class);
-              results.commits.add(req);
+              results.commits.add(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
               return newResult(req);
             }
           }
@@ -367,11 +349,11 @@ public class TestUtil {
                 if (errors.recover) {
                   errors.failOnAbort(-1);
                 }
-                throw new AmazonClientException(
-                    "Fail on abort " + results.aborts.size());
+                throw SdkException.builder().message("Fail on abort " + results.aborts.size()).build();
               }
-              results.aborts.add(invocation.getArgumentAt(
-                  0, AbortMultipartUploadRequest.class));
+
+              AbortMultipartUploadRequest req = invocation.getArgumentAt(0, AbortMultipartUploadRequest.class);
+              results.aborts.add(S3MultipartUploadRef.of(req.bucket(), req.key(), req.uploadId()));
               return null;
             }
           }
@@ -385,8 +367,8 @@ public class TestUtil {
           public Void answer(
               InvocationOnMock invocation) throws Throwable {
             synchronized (lock) {
-              results.deletes.add(invocation.getArgumentAt(
-                  0, DeleteObjectRequest.class));
+              DeleteObjectRequest req = invocation.getArgumentAt(0, DeleteObjectRequest.class);
+              results.deletes.add(S3Ref.of(req.bucket(), req.key()));
               return null;
             }
           }
@@ -397,24 +379,18 @@ public class TestUtil {
     return mockClient;
   }
 
-  private static CompleteMultipartUploadResult newResult(
+  private static CompleteMultipartUploadResponse newResult(
       CompleteMultipartUploadRequest req) {
-    return new CompleteMultipartUploadResult();
+    return CompleteMultipartUploadResponse.builder().build();
   }
 
-  private static UploadPartResult newResult(UploadPartRequest request,
+  private static UploadPartResponse newResult(UploadPartRequest request,
                                             String etag) {
-    UploadPartResult result = new UploadPartResult();
-    result.setPartNumber(request.getPartNumber());
-    result.setETag(etag);
-    return result;
+    return UploadPartResponse.builder().eTag(etag).build();
   }
 
-  private static InitiateMultipartUploadResult newResult(
-      InitiateMultipartUploadRequest request, String uploadId) {
-    InitiateMultipartUploadResult result = new InitiateMultipartUploadResult();
-    result.setUploadId(uploadId);
-    return result;
+  private static CreateMultipartUploadResponse newResult(S3MultipartUploadRef uploadRef) {
+    return CreateMultipartUploadResponse.builder().uploadId(uploadRef.uploadId()).build();
   }
 
   public static void createTestOutputFiles(List<String> relativeFiles,

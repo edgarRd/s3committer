@@ -16,16 +16,6 @@
 
 package com.netflix.bdp.s3;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadResult;
-import com.amazonaws.services.s3.model.PartETag;
-import com.amazonaws.services.s3.model.UploadPartRequest;
-import com.amazonaws.services.s3.model.UploadPartResult;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSortedMap;
@@ -37,86 +27,90 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.io.EOFException;
-import java.io.File;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.Serializable;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.util.*;
 
 public class S3Util {
 
   private static final Logger LOG = LoggerFactory.getLogger(S3Util.class);
 
-  public static void revertCommit(AmazonS3 client,
+  public static void revertCommit(S3Client client,
                                   PendingUpload commit) {
     client.deleteObject(commit.newDeleteRequest());
   }
 
-  public static void finishCommit(AmazonS3 client,
+  public static void finishCommit(S3Client client,
                                   PendingUpload commit) {
     client.completeMultipartUpload(commit.newCompleteRequest());
   }
 
-  public static void abortCommit(AmazonS3 client,
+  public static void abortCommit(S3Client client,
                                  PendingUpload commit) {
     client.abortMultipartUpload(commit.newAbortRequest());
   }
 
   public static PendingUpload multipartUpload(
-      AmazonS3 client, File localFile, String partition,
-      String bucket, String key, long uploadPartSize) {
+          S3Client client, File localFile, String partition,
+          String bucket, String key, int uploadPartSize) {
+    Preconditions.checkArgument(localFile.length() > 0, "Cannot upload 0 byte file: " + localFile);
 
-    InitiateMultipartUploadResult initiate = client.initiateMultipartUpload(
-        new InitiateMultipartUploadRequest(bucket, key));
-    String uploadId = initiate.getUploadId();
+    // Initiate a multipart upload
+    CreateMultipartUploadRequest createRequest = CreateMultipartUploadRequest.builder()
+            .bucket(bucket)
+            .key(key)
+            .build();
 
+    CreateMultipartUploadResponse createResponse = client.createMultipartUpload(createRequest);
+    String uploadId = createResponse.uploadId();
+
+    // Prepare the parts to be uploaded
+    Map<Integer, String> partToEtag = Maps.newLinkedHashMap();
+    ByteBuffer buffer = ByteBuffer.allocate(uploadPartSize); // Set your preferred part size (5 MB in this example)
+    int partNumber = 1;
     boolean threw = true;
-    try {
-      Map<Integer, String> etags = Maps.newLinkedHashMap();
+    try (RandomAccessFile file = new RandomAccessFile(localFile, "r")) {
+      long fileSize = file.length();
+      long position = 0;
 
-      long offset = 0;
-      long numParts = (localFile.length() / uploadPartSize +
-          ((localFile.length() % uploadPartSize) > 0 ? 1 : 0));
+      while (position < fileSize) {
+        file.seek(position);
+        int bytesRead = file.getChannel().read(buffer);
 
-      Preconditions.checkArgument(numParts > 0,
-          "Cannot upload 0 byte file: " + localFile);
+        buffer.flip();
+        UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .uploadId(uploadId)
+                .partNumber(partNumber)
+                .contentLength((long) bytesRead)
+                .build();
 
-      for (int partNumber = 1; partNumber <= numParts; partNumber += 1) {
-        long size = Math.min(localFile.length() - offset, uploadPartSize);
-        UploadPartRequest part = new UploadPartRequest()
-            .withBucketName(bucket)
-            .withKey(key)
-            .withPartNumber(partNumber)
-            .withUploadId(uploadId)
-            .withFile(localFile)
-            .withFileOffset(offset)
-            .withPartSize(size)
-            .withLastPart(partNumber == numParts);
+        UploadPartResponse response = client.uploadPart(uploadPartRequest, RequestBody.fromByteBuffer(buffer));
+        partToEtag.put(partNumber, response.eTag());
 
-        UploadPartResult partResult = client.uploadPart(part);
-        PartETag etag = partResult.getPartETag();
-        etags.put(etag.getPartNumber(), etag.getETag());
-
-        offset += uploadPartSize;
+        buffer.clear();
+        position += bytesRead;
+        partNumber++;
       }
 
-      PendingUpload pending = new PendingUpload(
-          partition, bucket, key, uploadId, etags);
-
+      PendingUpload pending = new PendingUpload(partition, bucket, key, uploadId, partToEtag);
       threw = false;
-
       return pending;
 
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
     } finally {
       if (threw) {
         try {
           client.abortMultipartUpload(
-              new AbortMultipartUploadRequest(bucket, key, uploadId));
-        } catch (AmazonClientException e) {
+                  AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build());
+        } catch (SdkException e) {
           LOG.error("Failed to abort multi-part upload", e);
         }
       }
@@ -208,38 +202,30 @@ public class S3Util {
       this.parts = ImmutableSortedMap.copyOf(etags);
     }
 
-    public PendingUpload(String bucket, String key,
-                         String uploadId, List<PartETag> etags) {
-      this.partition = null;
-      this.bucket = bucket;
-      this.key = key;
-      this.uploadId = uploadId;
-
-      ImmutableSortedMap.Builder<Integer, String> builder =
-          ImmutableSortedMap.builder();
-      for (PartETag etag : etags) {
-        builder.put(etag.getPartNumber(), etag.getETag());
-      }
-
-      this.parts = builder.build();
-    }
-
     public CompleteMultipartUploadRequest newCompleteRequest() {
-      List<PartETag> etags = Lists.newArrayList();
+      final List<CompletedPart> partsCopy = Lists.newArrayList();
+
       for (Map.Entry<Integer, String> entry : parts.entrySet()) {
-        etags.add(new PartETag(entry.getKey(), entry.getValue()));
+        partsCopy.add(CompletedPart.builder()
+            .partNumber(entry.getKey())
+            .eTag(entry.getValue())
+            .build());
       }
 
-      return new CompleteMultipartUploadRequest(
-          bucket, key, uploadId, etags);
+      return CompleteMultipartUploadRequest.builder()
+              .bucket(bucket)
+              .key(key)
+              .uploadId(uploadId)
+              .multipartUpload(CompletedMultipartUpload.builder().parts(partsCopy).build())
+              .build();
     }
 
     public DeleteObjectRequest newDeleteRequest() {
-      return new DeleteObjectRequest(bucket, key);
+      return DeleteObjectRequest.builder().bucket(bucket).key(key).build();
     }
 
     public AbortMultipartUploadRequest newAbortRequest() {
-      return new AbortMultipartUploadRequest(bucket, key, uploadId);
+      return AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build();
     }
 
     public String getBucketName() {
